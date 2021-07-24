@@ -7,7 +7,7 @@ app.use(express.static(__dirname + '/public'))
 
 app.get('/', function(request, response) {
   var id = os.hostname()
-  var obj = { msg: 'Hello', container_id: id }
+  var obj = { msg: 'Hello World', container_id: id }
   var json = JSON.stringify(obj)
   response.writeHead(200, {'Content-Type': 'application/json'})
   response.write(json)
