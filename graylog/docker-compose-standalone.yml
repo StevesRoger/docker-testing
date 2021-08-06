@@ -1,0 +1,26 @@
+version: '3.5'
+services:
+  graylog:
+    image: chhengkim/graylog:1.0
+    container_name: graylog
+    #restart: always
+    environment:
+      - ELASTIC_SEARCH_HOST=http://10.0.2.21:9200
+      - MONGODB_HOST=10.0.2.21
+    networks:
+      - graylog
+    ports:
+      # Graylog web interface and REST API      
+      - 9000:9000
+      # Syslog TCP
+      - 514:514
+      # Syslog UDP
+      - 514:514/udp
+      # GELF TCP
+      - 12201:12201
+      # GELF UDP
+      - 12201:12201/udp  
+      # Raw/Plaintext
+      - 5555:5555
+networks:
+  graylog:
