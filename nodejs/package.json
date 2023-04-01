@@ -15,5 +15,8 @@
   "engines": {
     "node": "0.12.x"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
 }

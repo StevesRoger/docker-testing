@@ -1,5 +1,11 @@
 package com.lazzy.console;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lazzy.console.model.DBMetadata;
+import com.lazzy.console.model.JNTAreaResponse;
+import com.lazzy.console.model.JNTMetadata;
+import org.apache.commons.io.FileUtils;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.*;
@@ -9,9 +15,7 @@ import java.net.URLEncoder;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 /**
  * Created: KimChheng
@@ -20,13 +24,22 @@ import java.util.Scanner;
  */
 public class Main {
 
-    public static void main(String[] args) {
+    public static final String APP_PROP = "application.properties";
+
+    public static void main(String[] args) throws Exception {
         osInfo();
-        //requestJNTProvince();
+        Properties properties = loadAppProperties();
+        Connection con = null;
         try {
-            connectDB();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
+            con = connectDB(properties);
+            List<JNTAreaResponse> jntAreaResponses = requestJNTProvince(properties);
+            System.out.println("There are " + jntAreaResponses.size() + " area");
+            System.out.println(jntAreaResponses);
+        } finally {
+            if (con != null) {
+                con.close();
+                System.out.println("Connection closed....");
+            }
         }
     }
 
@@ -38,60 +51,87 @@ public class Main {
         System.out.println("\n");
     }
 
-    private static void connectDB() throws SQLException {
-        Connection con = null;
-        try {
-            Scanner sc = new Scanner(System.in);
-            System.out.println("Please enter database host or ip example: 192.168.45.1");
-            String host = sc.nextLine();
-            System.out.println("Please enter database port example: 5432");
-            int port = sc.nextInt();
-            sc.nextLine(); // This line you have to add (It consumes the \n character)
-            System.out.println("Please enter database username example: admin");
-            String username = sc.nextLine();
-            System.out.println("Please enter database password example: 3es43s");
-            String password = sc.nextLine();
-            System.out.println("Please enter database name example: testing");
-            String dbName = sc.nextLine();
-            System.out.println("Connecting database....");
-            String url = String.format("jdbc:postgresql://%s:%s/%s", host, port, dbName);
-            Class.forName("org.postgresql.Driver");
-            con = DriverManager.getConnection(url, username, password);
-            System.out.println("Connection established successfully");
-            con.setAutoCommit(false);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (con != null) {
-                con.close();
-                System.out.println("Connection Closed....");
-            }
+    private static Properties loadAppProperties() throws IOException {
+        File file = new File(APP_PROP);
+        if (file.exists()) {
+            Properties properties = new Properties();
+            properties.load(new FileInputStream(file));
+            return properties;
         }
+        return new Properties();
     }
 
-    private static void requestJNTProvince() {
-        Scanner sc = new Scanner(System.in);
-        System.out.println("Enter a String");
-        String str = sc.nextLine();
-        System.out.println("The String is: " + str);
-        System.out.println("Enter an Integer");
-        int i = sc.nextInt();
-        System.out.println("The Integer is: " + i);
-        System.out.println("Enter a Float value");
-        float f = sc.nextFloat();
-        System.out.println("The Float value is: " + f);
+    private static Connection connectDB(Properties properties) throws SQLException, ClassNotFoundException, IOException {
+        DBMetadata metadata = new DBMetadata();
+        metadata.setHost(properties.getProperty(DBMetadata.DB_HOST));
+        metadata.setPort(Integer.parseInt(properties.getProperty(DBMetadata.DB_PORT, "0")));
+        metadata.setUsername(properties.getProperty(DBMetadata.DB_USERNAME));
+        metadata.setPassword(properties.getProperty(DBMetadata.DB_PASSWORD));
+        metadata.setDatabaseName(properties.getProperty(DBMetadata.DB_NAME));
+        if (!metadata.isValid()) {
+            Scanner sc = new Scanner(System.in);
+            System.out.println("Please enter database host or ip example: 192.168.45.1");
+            metadata.setHost(sc.nextLine());
+            System.out.println("Please enter database port example: 5432");
+            metadata.setPort(sc.nextInt());
+            sc.nextLine(); // This line you have to add (It consumes the \n character)
+            System.out.println("Please enter database username example: admin");
+            metadata.setUsername(sc.nextLine());
+            System.out.println("Please enter database password example: 3es43s");
+            metadata.setPassword(sc.nextLine());
+            System.out.println("Please enter database name example: testing");
+            metadata.setDatabaseName(sc.nextLine());
+            System.out.println("saving database metadata to " + APP_PROP);
+            FileUtils.writeLines(new File(APP_PROP), metadata.buildProperties(), true);
+            System.out.println("successfully");
+        }
+        System.out.println("Connecting database....");
+        String url = String.format("jdbc:postgresql://%s:%s/%s", metadata.getHost(), metadata.getPort(), metadata.getDatabaseName());
+        System.out.println(url);
+        Class.forName("org.postgresql.Driver");
+        Connection connection = DriverManager.getConnection(url, metadata.getUsername(), metadata.getPassword());
+        System.out.println("Connection established successfully");
+        return connection;
+    }
+
+    private static List<JNTAreaResponse> requestJNTProvince(Properties properties) throws Exception {
+        List<JNTAreaResponse> list = new ArrayList<>();
         HttpURLConnection con = null;
         try {
-            URL url = new URL("http://47.57.86.134/jandt-khm-api/api/baseData/findAllProvincesAndCities.do");
-            con = (HttpURLConnection) url.openConnection();
+            JNTMetadata metadata = new JNTMetadata();
+            metadata.setUrl(properties.getProperty(JNTMetadata.BASE_URL));
+            metadata.setDigest(properties.getProperty(JNTMetadata.DIGEST));
+            metadata.setCompanyId(properties.getProperty(JNTMetadata.COMPANY_ID));
+            metadata.setJson(properties.getProperty(JNTMetadata.JSON));
+            metadata.setMsgType(properties.getProperty(JNTMetadata.MSG_TYPE));
+            if (!metadata.isValid()) {
+                Scanner sc = new Scanner(System.in);
+                System.out.println("Please provide JNT metadata request");
+                System.out.println("Please enter base url example: http://47.57.86.134");
+                metadata.setUrl(sc.nextLine());
+                System.out.println("Please enter data digest example: 23943d3830a92c0ffe43e213306b26ca");
+                metadata.setDigest(sc.nextLine());
+                System.out.println("Please enter company id example: Wing Bank");
+                metadata.setCompanyId(sc.nextLine());
+                System.out.println("Please enter json data example: {\"customerid\": \"10002\"}");
+                metadata.setJson(sc.nextLine());
+                System.out.println("Please enter msg type example: OBTAINPROVCITYAREA");
+                metadata.setMsgType(sc.nextLine());
+                System.out.println("saving JNT metadata to " + APP_PROP);
+                FileUtils.writeLines(new File(APP_PROP), metadata.buildProperties(), true);
+                System.out.println("successfully");
+            }
+            String url = metadata.getUrl() + "/jandt-khm-api/api/baseData/findAllProvincesAndCities.do";
+            System.out.println("Requesting to JNT " + url);
+            con = (HttpURLConnection) new URL(url).openConnection();
             con.setConnectTimeout(5000);
             con.setReadTimeout(5000);
             con.setRequestMethod("POST");
             Map<String, String> parameters = new HashMap<>();
-            parameters.put("data_digest", "23943d3830a92c0ffe43e213306b26ca");
-            parameters.put("eccompanyid", "Wing Bank");
-            parameters.put("logistics_interface", "{\"customerid\": \"10002\" }");
-            parameters.put("msg_type", "OBTAINPROVCITYAREA");
+            parameters.put("data_digest", metadata.getDigest());
+            parameters.put("eccompanyid", metadata.getCompanyId());
+            parameters.put("logistics_interface", metadata.getJson());
+            parameters.put("msg_type", metadata.getMsgType());
             con.setDoOutput(true);
             DataOutputStream out = new DataOutputStream(con.getOutputStream());
             out.writeBytes(buildParamsString(parameters));
@@ -111,13 +151,23 @@ public class Main {
                 content.append(inputLine);
             }
             in.close();
-            System.out.println(new JSONObject(content.toString()).toString(2));
-        } catch (Exception e) {
-            e.printStackTrace();
+            JSONObject json = new JSONObject(content.toString());
+            System.out.println("Response status " + status);
+            System.out.println(json.toString());
+            System.out.println("\n");
+            if (200 == status && json.has("responseitems")) {
+                ObjectMapper objectMapper = new ObjectMapper();
+                JSONArray responseitems = json.getJSONArray("responseitems");
+                JSONArray baseList = responseitems.getJSONObject(0).getJSONArray("baseList");
+                for (int i = 0; i < baseList.length(); i++) {
+                    list.add(objectMapper.readValue(baseList.getJSONObject(i).toString(), JNTAreaResponse.class));
+                }
+            }
         } finally {
             if (con != null)
                 con.disconnect();
         }
+        return list;
     }
 
     public static String buildParamsString(Map<String, String> params) throws UnsupportedEncodingException {
