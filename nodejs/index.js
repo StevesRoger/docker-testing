@@ -4,7 +4,7 @@ const os = require("os");
 var createHttpProxyAgent = require("http-proxy-agent");
 var translator = require("@vitalets/google-translate-api");
 const agent = createHttpProxyAgent(
-  process.env.PROXY_AGENT || "http://125.22.61.95:80"
+  process.env.PROXY_AGENT || "http://161.117.89.36:8888"
 );
 
 app.set("port", process.env.PORT || 3000);
@@ -29,7 +29,8 @@ app.post("/translate", async function (req, res) {
   }
   strWords = strWords.slice(0, -1);
   console.log("===>>> words ", strWords);
-  var obj = {};
+  var body = {};
+  var status = 200;
   try {
     var data = await translator.translate(strWords, {
       to: "en",
@@ -37,17 +38,16 @@ app.post("/translate", async function (req, res) {
     });
     console.log("===>>> translate ", data.text);
     var id = os.hostname();
-    obj = {
+    body = {
       translate: data.text.split(",").map((v) => v.trim().toLowerCase()),
       container_id: id,
     };
   } catch (e) {
     console.log(e);
-    obj = { error: e };
+    body = e;
   }
-  var json = JSON.stringify(obj);
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.write(json);
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.write(JSON.stringify(body));
   res.end();
 });
 
