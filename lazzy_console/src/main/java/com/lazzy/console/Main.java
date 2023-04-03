@@ -2,7 +2,8 @@ package com.lazzy.console;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lazzy.console.model.DBMetadata;
-import com.lazzy.console.model.JNTAreaResponse;
+import com.lazzy.console.model.JNTAreaMetadata;
+import com.lazzy.console.model.JNTAreaMetadata.TranslateHolder;
 import com.lazzy.console.model.JNTMetadata;
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;
@@ -31,10 +32,20 @@ public class Main {
         Properties properties = loadAppProperties();
         Connection con = null;
         try {
-            con = connectDB(properties);
-            List<JNTAreaResponse> jntAreaResponses = requestJNTProvince(properties);
-            System.out.println("There are " + jntAreaResponses.size() + " area");
-            System.out.println(jntAreaResponses);
+            //con = connectDB(properties);
+            List<JNTAreaMetadata> jntAreaRespons = requestJNTProvince(properties);
+            Map<String, JNTAreaMetadata> jntAreaResponseMap = new HashMap<>();
+            Set<TranslateHolder> province = new HashSet<>();
+            Set<TranslateHolder> distict = new HashSet<>();
+            Set<TranslateHolder> commune = new HashSet<>();
+            for (JNTAreaMetadata metadata : jntAreaRespons) {
+                jntAreaResponseMap.putIfAbsent(metadata.getDestinationCode(), metadata);
+                province.add(new TranslateHolder(metadata.getProvince(), metadata.getDestinationCode()));
+                distict.add(new TranslateHolder(metadata.getCity(), metadata.getDestinationCode()));
+                commune.add(new TranslateHolder(metadata.getCountyarea(), metadata.getDestinationCode()));
+            }
+            System.out.println("There are " + jntAreaRespons.size() + " area");
+            System.out.println(jntAreaRespons);
         } finally {
             if (con != null) {
                 con.close();
@@ -94,8 +105,8 @@ public class Main {
         return connection;
     }
 
-    private static List<JNTAreaResponse> requestJNTProvince(Properties properties) throws Exception {
-        List<JNTAreaResponse> list = new ArrayList<>();
+    private static List<JNTAreaMetadata> requestJNTProvince(Properties properties) throws Exception {
+        List<JNTAreaMetadata> list = new ArrayList<>();
         HttpURLConnection con = null;
         try {
             JNTMetadata metadata = new JNTMetadata();
@@ -160,7 +171,7 @@ public class Main {
                 JSONArray responseitems = json.getJSONArray("responseitems");
                 JSONArray baseList = responseitems.getJSONObject(0).getJSONArray("baseList");
                 for (int i = 0; i < baseList.length(); i++) {
-                    list.add(objectMapper.readValue(baseList.getJSONObject(i).toString(), JNTAreaResponse.class));
+                    list.add(objectMapper.readValue(baseList.getJSONObject(i).toString(), JNTAreaMetadata.class));
                 }
             }
         } finally {
